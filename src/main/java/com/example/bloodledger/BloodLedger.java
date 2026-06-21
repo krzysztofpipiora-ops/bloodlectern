@@ -32,7 +32,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
     public void onEnable() {
         getServer().getPluginManager().registerEvents(this, this);
         
-        // Poprawna i bezpieczna rejestracja komendy głównej
         if (this.getCommand("bloodledger") != null) {
             this.getCommand("bloodledger").setExecutor(this);
         } else {
@@ -172,25 +171,24 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         }
 
         if (args.length > 0 && args[0].equalsIgnoreCase("set")) {
-            // Zwiekszony zasieg wzroku do 10 bloków
-            Block target = player.getTargetBlockExact(10);
-            
-            if (target == null || target.getType() == Material.AIR) {
-                player.sendMessage(ChatColor.RED + "Nie celujesz w żaden blok! Podejdź bliżej pulpitu.");
-                return true;
-            }
+            // Pobieramy blok dokładnie tam, gdzie stoi gracz (na poziomie jego nóg)
+            Location spawnLoc = player.getLocation().getBlock().getLocation();
+            Block targetBlock = spawnLoc.getBlock();
 
-            if (target.getType() == Material.LECTERN) {
-                lecternLocation = target.getLocation();
-                player.sendMessage(ChatColor.GREEN + "Pomyślnie ustawiono pulpit Księgi Krwi!");
-                updateBloodLedger();
-            } else {
-                player.sendMessage(ChatColor.RED + "Musisz patrzeć bezpośrednio na Pulpit (Lectern)! Celujesz teraz w: " + target.getType());
-            }
+            // Automatycznie zmieniamy ten blok w Pulpit
+            targetBlock.setType(Material.LECTERN);
+            
+            // Zapisujemy lokalizację w pamięci pluginu
+            lecternLocation = spawnLoc;
+
+            player.sendMessage(ChatColor.GREEN + "Pomyślnie postawiono i skonfigurowano pulpit Księgi Krwi w Twojej pozycji!");
+            
+            // Wywołujemy natychmiastową aktualizację i włożenie książki
+            updateBloodLedger();
             return true;
         }
 
-        player.sendMessage(ChatColor.YELLOW + "Użyj: /bloodledger set - patrząc prosto na pulpit.");
+        player.sendMessage(ChatColor.YELLOW + "Użyj: /bloodledger set - aby postawić pulpit w miejscu, w którym stoisz.");
         return true;
     }
 
