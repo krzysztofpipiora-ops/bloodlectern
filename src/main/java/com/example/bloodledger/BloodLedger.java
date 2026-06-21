@@ -17,7 +17,6 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerTakeBookEvent; // NOWOŚĆ
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BookMeta;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -84,7 +83,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         if (!(block.getState() instanceof Lectern)) return;
         Lectern lectern = (Lectern) block.getState();
 
-        // Tworzymy nową, zapisaną książkę (WRITTEN_BOOK)
         ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
         BookMeta meta = (BookMeta) book.getItemMeta();
         if (meta == null) return;
@@ -135,8 +133,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
         book.setItemMeta(meta);
         
-        // KLUCZOWE ROZWIĄZANIE: Najpierw czyścimy całkowicie slot (usuwamy Book and Quill),
-        // a dopiero potem wymuszamy ustawienie naszej WRITTEN_BOOK.
         lectern.getInventory().clear();
         lectern.update(true, true); 
         
@@ -148,10 +144,11 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
     public void onLecternClick(PlayerInteractEvent event) {
         Player player = event.getPlayer();
         
-        if (event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
+        if (event.getClickedBlock() != null && event.getClickedBlock().getType() == Material.LECTERN) {
             Block block = event.getClickedBlock();
             
-            if (block.getType() == Material.LECTERN && player.getInventory().getItemInMainHand().getType() == Material.FEATHER) {
+            // 1. Logika rejestracji nowej księgi za pomocą Pióra
+            if (event.getAction() == Action.RIGHT_CLICK_BLOCK && player.getInventory().getItemInMainHand().getType() == Material.FEATHER) {
                 if (!player.isOp()) return;
                 
                 org.bukkit.block.data.type.Lectern lecternData = (org.bukkit.block.data.type.Lectern) block.getBlockData();
@@ -168,17 +165,18 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
                 
                 player.sendMessage(ChatColor.GREEN + "Pomyślnie zarejestrowano ten pulpit jako Księgę Krwi!");
                 updateBloodLedger();
+                return;
             }
-        }
-    }
 
-    // NOWOŚĆ: Blokada wyjmowania książki z pulpitu Księgi Krwi
-    @EventHandler
-    public void onBookTake(PlayerTakeBookEvent event) {
-        if (lecternLocation != null && event.getLectern().getLocation().equals(lecternLocation)) {
-            if (!event.getPlayer().isOp()) {
-                event.setCancelled(true);
-                event.getPlayer().sendMessage(ChatColor.RED + "Nie możesz ukraść Księgi Krwi!");
+            // 2. NOWOŚĆ ALTERNATE: Uniwersalna blokada wyciągania / niszczenia interfejsu Księgi Krwi
+            if (lecternLocation != null && block.getLocation().equals(lecternLocation)) {
+                // Pozwalamy wyłącznie na zwykłe otwieranie (PPM), jeśli gracz nie trzyma pióra
+                if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
+                    if (!player.isOp()) {
+                        event.setCancelled(true);
+                        player.sendMessage(ChatColor.RED + "Nie możesz zniszczyć ani okraść Księgi Krwi!");
+                    }
+                }
             }
         }
     }
