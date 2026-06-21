@@ -32,14 +32,12 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
     @Override
     public void onEnable() {
-        // USUNIĘTO: saveDefaultConfig() - to naprawia błąd IllegalArgumentException!
         getServer().getPluginManager().registerEvents(this, this);
         
         if (this.getCommand("bloodledger") != null) {
             this.getCommand("bloodledger").setExecutor(this);
         }
 
-        // Bezpieczne wczytywanie lokalizacji (jeśli plik config istnieje)
         if (getConfig().contains("lectern-location")) {
             lecternLocation = getConfig().getLocation("lectern-location");
         }
@@ -99,10 +97,14 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         page1.append(ChatColor.RED + "=== KSIĘGA KRWI ===\n\n");
         page1.append(ChatColor.DARK_GRAY + "Najwiecej zabojstw:\n");
 
-        playerDataMap.values().stream()
-                .sorted((p1, p2) -> Integer.compare(p2.kills, p1.kills))
-                .limit(5)
-                .forEach(p -> page1.append(ChatColor.BLACK + "- " + p.name + ": " + ChatColor.RED + p.kills + "\n"));
+        if (playerDataMap.isEmpty()) {
+            page1.append(ChatColor.GRAY + "Brak zarejestrowanych walk. Badz pierwszy!\n");
+        } else {
+            playerDataMap.values().stream()
+                    .sorted((p1, p2) -> Integer.compare(p2.kills, p1.kills))
+                    .limit(5)
+                    .forEach(p -> page1.append(ChatColor.BLACK + "- " + p.name + ": " + ChatColor.RED + p.kills + "\n"));
+        }
         meta.addPage(page1.toString());
 
         // Strona 2: Kordy poszukiwanych graczy (KS > 3)
@@ -133,6 +135,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
         book.setItemMeta(meta);
         
+        // Czyszczenie starego stanu i twarde wymuszenie aktualizacji ekwipunku bloku
         lectern.getInventory().clear();
         lectern.getInventory().setItem(0, book);
         lectern.update(true, true);
@@ -172,6 +175,9 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
             PlayerData killerData = getPlayerData(killer);
             killerData.kills++;
             killerData.killstreak++;
+            
+            // Każde zabójstwo automatycznie odświeża książkę w czasie rzeczywistym
+            updateBloodLedger();
         }
     }
 
