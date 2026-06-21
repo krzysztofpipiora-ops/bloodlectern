@@ -7,15 +7,16 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.Lectern;
-import org.bukkit.block.data.Directional;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BookMeta;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -42,7 +43,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
             lecternLocation = getConfig().getLocation("lectern-location");
         }
 
-        // Tracker baz co 5 sekund
+        // Tracker lokalizacji baz (co 5 sekund)
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -82,15 +83,11 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         Block block = lecternLocation.getBlock();
         if (block.getType() != Material.LECTERN) return;
 
-        // Bezpieczne sprawdzenie stanu bloku przed rzutowaniem klas
-        if (!(block.getState() instanceof Lectern)) {
-            return;
-        }
-        
+        if (!(block.getState() instanceof Lectern)) return;
         Lectern lectern = (Lectern) block.getState();
+        
         ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
         BookMeta meta = (BookMeta) book.getItemMeta();
-
         if (meta == null) return;
 
         meta.setTitle(ChatColor.DARK_RED + "Ksiega Krwi");
@@ -105,10 +102,9 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
                 .sorted((p1, p2) -> Integer.compare(p2.kills, p1.kills))
                 .limit(5)
                 .forEach(p -> page1.append(ChatColor.BLACK + "- " + p.name + ": " + ChatColor.RED + p.kills + "\n"));
-
         meta.addPage(page1.toString());
 
-        // Strona 2: KS > 3
+        // Strona 2: Kordy poszukiwanych graczy (KS > 3)
         StringBuilder page2 = new StringBuilder();
         page2.append(ChatColor.DARK_RED + "Poszukiwani (>3 KS):\n\n");
         boolean anyBounty = false;
@@ -136,12 +132,33 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
         book.setItemMeta(meta);
         
-        try {
-            lectern.getInventory().clear();
-            lectern.getInventory().setItem(0, book);
-            lectern.update(true, true);
-        } catch (Exception e) {
-            getLogger().warning("Nie udalo sie wlozyc ksiazki do pulpitu. Bloku jeszcze nie zainicjalizowano.");
+        lectern.getInventory().clear();
+        lectern.getInventory().setItem(0, book);
+        lectern.update(true, true);
+    }
+
+    // REJESTRACJA PRZEZ KLIKNIĘCIE PIÓRKIEM
+    @EventHandler
+    public void onLecternClick(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        
+        // Sprawdzamy czy gracz klika prawym przyciskiem myszy na blok
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
+            Block block = event.getClickedBlock();
+            
+            // Sprawdzamy czy klika w pulpit i trzyma PIÓRO (Feather) oraz ma opa
+            if (block.getType() == Material.LECTERN && player.getInventory().getItemInMainHand().getType() == Material.FEATHER) {
+                if (!player.isOp()) return;
+                
+                event.setCancelled(true); // Blokujemy domyślne otwarcie pustego menu
+                
+                lecternLocation = block.getLocation();
+                getConfig().set("lectern-location", lecternLocation);
+                saveConfig();
+                
+                player.sendMessage(ChatColor.GREEN + "Pomyślnie zarejestrowano ten pulpit jako Księgę Krwi!");
+                updateBloodLedger();
+            }
         }
     }
 
@@ -170,58 +187,10 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         }
     }
 
+    // Usunęliśmy wadliwą komendę tekstową na rzecz kliknięcia przedmiotem
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!(sender instanceof Player)) return true;
-        Player player = (Player) sender;
-
-        if (!player.isOp()) {
-            player.sendMessage(ChatColor.RED + "Brak uprawnien.");
-            return true;
-        }
-
-        if (args.length > 0 && args[0].equalsIgnoreCase("set")) {
-            // Pobieramy bezpieczną pozycję pod nogami gracza
-            final Location spawnLoc = player.getLocation().getBlock().getLocation();
-            
-            // Zapisujemy lokalizację w plikach konfiguracyjnych serwera
-            lecternLocation = spawnLoc;
-            getConfig().set("lectern-location", spawnLoc);
-            saveConfig();
-
-            final org.bukkit.block.BlockFace playerFacing = player.getFacing();
-
-            // PRZENIESIENIE CAŁEJ LOGIKI DO SCHEDULERA (Czeka 2 ticki, dając serwerowi czas na bezpieczną modyfikację świata)
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    Block targetBlock = spawnLoc.getBlock();
-                    
-                    // 1. Stawiamy blok
-                    targetBlock.setType(Material.LECTERN, false);
-                    
-                    // 2. Obracamy blok
-                    if (targetBlock.getBlockData() instanceof Directional) {
-                        Directional directional = (Directional) targetBlock.getBlockData();
-                        directional.setFacing(playerFacing.getOppositeFace());
-                        targetBlock.setBlockData(directional, false);
-                    }
-                    
-                    // 3. Wkładamy książkę (kolejne opóźnienie 2 ticki, aby stan bloku się odświeżył)
-                    new BukkitRunnable() {
-                        @Override
-                        public void run() {
-                            updateBloodLedger();
-                        }
-                    }.runTaskLater(BloodLedger.this, 2L);
-                }
-            }.runTaskLater(this, 2L);
-
-            player.sendMessage(ChatColor.GREEN + "Pomyślnie zainicjowano tworzenie Księgi Krwi w Twojej pozycji!");
-            return true;
-        }
-
-        player.sendMessage(ChatColor.YELLOW + "Użyj: /bloodledger set");
+        sender.sendMessage(ChatColor.YELLOW + "Aby ustawić Księgę Krwi: Postaw zwykły pulpit, weź PIÓRO (Feather) do ręki i kliknij nim PPM na pulpit.");
         return true;
     }
 
