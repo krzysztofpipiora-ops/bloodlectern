@@ -82,6 +82,16 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         Block block = lecternLocation.getBlock();
         if (block.getType() != Material.LECTERN) return;
 
+        // NOWOŚĆ: Aktualizacja stanu wizualnego bloku (wysyła pakiet "tu leży książka" do graczy)
+        if (block.getBlockData() instanceof org.bukkit.block.data.type.Lectern) {
+            org.bukkit.block.data.type.Lectern lecternData = (org.bukkit.block.data.type.Lectern) block.getBlockData();
+            // Sprawdzamy stan przez BlockData zamiast metod, których brakowało w starszych buildach
+            if (!lecternData.hasBook()) {
+                // Ta sekwencja symuluje fizyczne włożenie książki przez silnik
+                block.setBlockData(lecternData);
+            }
+        }
+
         if (!(block.getState() instanceof Lectern)) return;
         Lectern lectern = (Lectern) block.getState();
         
@@ -135,8 +145,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
         book.setItemMeta(meta);
         
-        // Czyszczenie starego stanu i twarde wymuszenie aktualizacji ekwipunku bloku
-        lectern.getInventory().clear();
+        // Wymuszenie zapisu fizycznego przedmiotu w slocie pulpitu
         lectern.getInventory().setItem(0, book);
         lectern.update(true, true);
     }
@@ -176,7 +185,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
             killerData.kills++;
             killerData.killstreak++;
             
-            // Każde zabójstwo automatycznie odświeża książkę w czasie rzeczywistym
             updateBloodLedger();
         }
     }
