@@ -31,7 +31,13 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
     @Override
     public void onEnable() {
         getServer().getPluginManager().registerEvents(this, this);
-        Objects.requireNonNull(this.getCommand("bloodledger")).setExecutor(this);
+        
+        // Poprawna i bezpieczna rejestracja komendy głównej
+        if (this.getCommand("bloodledger") != null) {
+            this.getCommand("bloodledger").setExecutor(this);
+        } else {
+            getLogger().severe("Blad krytyczny: Nie udalo sie zarejestrowac komendy /bloodledger w systemie!");
+        }
 
         // Tracker lokalizacji baz (co 5 sekund)
         new BukkitRunnable() {
@@ -78,12 +84,13 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
         if (meta == null) return;
 
-        meta.setTitle(ChatColor.DARK_RED + "Ksiegą Krwi");
+        meta.setTitle(ChatColor.DARK_RED + "Ksiega Krwi");
         meta.setAuthor("Serwer");
 
+        // Strona 1: Top 5 Killi
         StringBuilder page1 = new StringBuilder();
         page1.append(ChatColor.RED + "=== KSIĘGA KRWI ===\n\n");
-        page1.append(ChatColor.DARK_GRAY + "Najwięcej zabójstw:\n");
+        page1.append(ChatColor.DARK_GRAY + "Najwiecej zabojstw:\n");
 
         playerDataMap.values().stream()
                 .sorted((p1, p2) -> Integer.compare(p2.kills, p1.kills))
@@ -92,6 +99,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
         meta.addPage(page1.toString());
 
+        // Strona 2: Kordy poszukiwanych graczy (KS > 3)
         StringBuilder page2 = new StringBuilder();
         page2.append(ChatColor.DARK_RED + "Poszukiwani (>3 KS):\n\n");
         boolean anyBounty = false;
@@ -144,34 +152,45 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         if (lecternLocation != null && event.getBlock().getLocation().equals(lecternLocation)) {
             if (!event.getPlayer().isOp()) {
                 event.setCancelled(true);
-                event.getPlayer().sendMessage(ChatColor.RED + "Nie możesz zniszczyć Księgi Krwi!");
+                event.getPlayer().sendMessage(ChatColor.RED + "Nie mozesz zniszczyc Ksiegi Krwi!");
             }
         }
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        if (!(sender instanceof Player)) return true;
+        if (!(sender instanceof Player)) {
+            sender.sendMessage("Ta komenda moze byc uzyta tylko przez gracza na serwerze.");
+            return true;
+        }
+        
         Player player = (Player) sender;
 
         if (!player.isOp()) {
-            player.sendMessage(ChatColor.RED + "Brak uprawnien.");
+            player.sendMessage(ChatColor.RED + "Brak uprawnien. Musisz miec status Operatora (OP).");
             return true;
         }
 
         if (args.length > 0 && args[0].equalsIgnoreCase("set")) {
-            Block target = player.getTargetBlockExact(5);
-            if (target != null && target.getType() == Material.LECTERN) {
+            // Zwiekszony zasieg wzroku do 10 bloków
+            Block target = player.getTargetBlockExact(10);
+            
+            if (target == null || target.getType() == Material.AIR) {
+                player.sendMessage(ChatColor.RED + "Nie celujesz w żaden blok! Podejdź bliżej pulpitu.");
+                return true;
+            }
+
+            if (target.getType() == Material.LECTERN) {
                 lecternLocation = target.getLocation();
-                player.sendMessage(ChatColor.GREEN + "Pomyslnie ustawiono pulpit Ksiegi Krwi!");
+                player.sendMessage(ChatColor.GREEN + "Pomyślnie ustawiono pulpit Księgi Krwi!");
                 updateBloodLedger();
             } else {
-                player.sendMessage(ChatColor.RED + "Musisz patrzec na pulpit (Lectern) z bliska!");
+                player.sendMessage(ChatColor.RED + "Musisz patrzeć bezpośrednio na Pulpit (Lectern)! Celujesz teraz w: " + target.getType());
             }
             return true;
         }
 
-        player.sendMessage(ChatColor.YELLOW + "Uzyj: /bloodledger set - patrzac na pulpit.");
+        player.sendMessage(ChatColor.YELLOW + "Użyj: /bloodledger set - patrząc prosto na pulpit.");
         return true;
     }
 
