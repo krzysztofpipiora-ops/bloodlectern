@@ -42,7 +42,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
             lecternLocation = getConfig().getLocation("lectern-location");
         }
 
-        // Tracker lokalizacji baz (co 5 sekund)
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -53,7 +52,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
             }
         }.runTaskTimer(this, 100L, 100L);
 
-        // Aktualizacja o świcie
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -82,19 +80,17 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         Block block = lecternLocation.getBlock();
         if (block.getType() != Material.LECTERN) return;
 
-        // NOWOŚĆ: Aktualizacja stanu wizualnego bloku (wysyła pakiet "tu leży książka" do graczy)
-        if (block.getBlockData() instanceof org.bukkit.block.data.type.Lectern) {
-            org.bukkit.block.data.type.Lectern lecternData = (org.bukkit.block.data.type.Lectern) block.getBlockData();
-            // Sprawdzamy stan przez BlockData zamiast metod, których brakowało w starszych buildach
-            if (!lecternData.hasBook()) {
-                // Ta sekwencja symuluje fizyczne włożenie książki przez silnik
-                block.setBlockData(lecternData);
-            }
-        }
-
         if (!(block.getState() instanceof Lectern)) return;
         Lectern lectern = (Lectern) block.getState();
-        
+
+        // 1. Sprawdzamy czy Minecraft widzi tu fizyczną książkę (naprawia błąd wizualny)
+        org.bukkit.block.data.type.Lectern lecternData = (org.bukkit.block.data.type.Lectern) block.getBlockData();
+        if (!lecternData.hasBook()) {
+            // Jeśli książka zniknęła wizualnie, włożenie jej kodem bywa ignorowane przez klienta.
+            // Metoda PPM z Book and Quill (poniżej) to jedyne stałe rozwiązanie.
+            return; 
+        }
+
         ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
         BookMeta meta = (BookMeta) book.getItemMeta();
         if (meta == null) return;
@@ -102,7 +98,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         meta.setTitle(ChatColor.DARK_RED + "Ksiega Krwi");
         meta.setAuthor("Serwer");
 
-        // Strona 1: Top 5 Killi
         StringBuilder page1 = new StringBuilder();
         page1.append(ChatColor.RED + "=== KSIĘGA KRWI ===\n\n");
         page1.append(ChatColor.DARK_GRAY + "Najwiecej zabojstw:\n");
@@ -117,7 +112,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         }
         meta.addPage(page1.toString());
 
-        // Strona 2: Kordy poszukiwanych graczy (KS > 3)
         StringBuilder page2 = new StringBuilder();
         page2.append(ChatColor.DARK_RED + "Poszukiwani (>3 KS):\n\n");
         boolean anyBounty = false;
@@ -145,7 +139,8 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
         book.setItemMeta(meta);
         
-        // Wymuszenie zapisu fizycznego przedmiotu w slocie pulpitu
+        // 2. RĘCZNIE NADPISUJEMY ZAWARTOŚĆ ISTNIEJĄCEJ KSIĄŻKI W PULPICIE
+        lectern.getInventory().clear();
         lectern.getInventory().setItem(0, book);
         lectern.update(true, true);
     }
@@ -160,13 +155,20 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
             if (block.getType() == Material.LECTERN && player.getInventory().getItemInMainHand().getType() == Material.FEATHER) {
                 if (!player.isOp()) return;
                 
+                // NOWOŚĆ: Sprawdzamy czy silnik gry widzi RĘCZNIE włożoną książkę
+                org.bukkit.block.data.type.Lectern lecternData = (org.bukkit.block.data.type.Lectern) block.getBlockData();
+                if (!lecternData.hasBook()) {
+                    player.sendMessage(ChatColor.RED + "Musisz najpierw RĘCZNIE włożyć dowolną książkę z piórem (Book and Quill) do pulpitu, aby stworzyć teksturę!");
+                    return;
+                }
+
                 event.setCancelled(true);
                 
                 lecternLocation = block.getLocation();
                 getConfig().set("lectern-location", lecternLocation);
                 saveConfig();
                 
-                player.sendMessage(ChatColor.GREEN + "Pomyślnie zarejestrowano ten pulpit jako Księgę Krwi!");
+                player.sendMessage(ChatColor.GREEN + "Pomyślnie zarejestrowano ten pulpit jako Księgę Krwi! Nadpisuję zawartość książki.");
                 updateBloodLedger();
             }
         }
@@ -201,7 +203,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        sender.sendMessage(ChatColor.YELLOW + "Aby ustawić Księgę Krwi: Postaw zwykły pulpit, weź PIÓRO (Feather) do ręki i kliknij nim PPM na pulpit.");
+        sender.sendMessage(ChatColor.YELLOW + "Aby ustawić Księgę Krwi: Postaw pulpit, RĘCZNIE włóż do niego Book and Quill (aby był wizualny), weź Pióro do ręki i kliknij nim na pulpit PPM.");
         return true;
     }
 
