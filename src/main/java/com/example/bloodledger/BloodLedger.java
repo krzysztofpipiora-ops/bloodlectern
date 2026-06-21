@@ -32,13 +32,14 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
     @Override
     public void onEnable() {
-        saveDefaultConfig();
+        // USUNIĘTO: saveDefaultConfig() - to naprawia błąd IllegalArgumentException!
         getServer().getPluginManager().registerEvents(this, this);
         
         if (this.getCommand("bloodledger") != null) {
             this.getCommand("bloodledger").setExecutor(this);
         }
 
+        // Bezpieczne wczytywanie lokalizacji (jeśli plik config istnieje)
         if (getConfig().contains("lectern-location")) {
             lecternLocation = getConfig().getLocation("lectern-location");
         }
@@ -137,20 +138,17 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         lectern.update(true, true);
     }
 
-    // REJESTRACJA PRZEZ KLIKNIĘCIE PIÓRKIEM
     @EventHandler
     public void onLecternClick(PlayerInteractEvent event) {
         Player player = event.getPlayer();
         
-        // Sprawdzamy czy gracz klika prawym przyciskiem myszy na blok
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK && event.getClickedBlock() != null) {
             Block block = event.getClickedBlock();
             
-            // Sprawdzamy czy klika w pulpit i trzyma PIÓRO (Feather) oraz ma opa
             if (block.getType() == Material.LECTERN && player.getInventory().getItemInMainHand().getType() == Material.FEATHER) {
                 if (!player.isOp()) return;
                 
-                event.setCancelled(true); // Blokujemy domyślne otwarcie pustego menu
+                event.setCancelled(true);
                 
                 lecternLocation = block.getLocation();
                 getConfig().set("lectern-location", lecternLocation);
@@ -187,7 +185,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         }
     }
 
-    // Usunęliśmy wadliwą komendę tekstową na rzecz kliknięcia przedmiotem
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         sender.sendMessage(ChatColor.YELLOW + "Aby ustawić Księgę Krwi: Postaw zwykły pulpit, weź PIÓRO (Feather) do ręki i kliknij nim PPM na pulpit.");
