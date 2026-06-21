@@ -7,6 +7,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.Lectern;
+import org.bukkit.block.data.Directional;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -171,20 +172,31 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         }
 
         if (args.length > 0 && args[0].equalsIgnoreCase("set")) {
-            // Pobieramy blok dokładnie tam, gdzie stoi gracz (na poziomie jego nóg)
             Location spawnLoc = player.getLocation().getBlock().getLocation();
             Block targetBlock = spawnLoc.getBlock();
 
-            // Automatycznie zmieniamy ten blok w Pulpit
+            // Ustawiamy typ bloku na pulpit
             targetBlock.setType(Material.LECTERN);
             
-            // Zapisujemy lokalizację w pamięci pluginu
+            // Obracamy pulpit przodem do gracza (wykorzystujemy kierunek spojrzenia)
+            if (targetBlock.getBlockData() instanceof Directional) {
+                Directional directional = (Directional) targetBlock.getBlockData();
+                directional.setFacing(player.getFacing().getOppositeFace());
+                targetBlock.setBlockData(directional);
+            }
+            
             lecternLocation = spawnLoc;
 
-            player.sendMessage(ChatColor.GREEN + "Pomyślnie postawiono i skonfigurowano pulpit Księgi Krwi w Twojej pozycji!");
-            
-            // Wywołujemy natychmiastową aktualizację i włożenie książki
-            updateBloodLedger();
+            player.sendMessage(ChatColor.GREEN + "Pomyślnie postawiono pulpit Księgi Krwi!");
+
+            // KLUCZOWA ZMIANA: Czekamy dokładnie 1 tick (20ms) na załadowanie się bloku, zanim włożymy książkę
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    updateBloodLedger();
+                }
+            }.runTaskLater(this, 1L);
+
             return true;
         }
 
