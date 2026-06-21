@@ -6,3 +6,4 @@ commands:
   bloodledger:
     description: Zarzadzanie Ksiega Krwi.
     permission: bloodledger.admin
+    usage: /<command> set
