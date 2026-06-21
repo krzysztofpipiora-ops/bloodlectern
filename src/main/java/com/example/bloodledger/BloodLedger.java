@@ -83,13 +83,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         Block block = lecternLocation.getBlock();
         if (block.getType() != Material.LECTERN) return;
 
-        // Wymuszenie na silniku gry, aby wiedział, że pulpit posiada książkę (naprawia błąd wizualny)
-        if (block.getBlockData() instanceof org.bukkit.block.data.type.Lectern) {
-            org.bukkit.block.data.type.Lectern lecternData = (org.bukkit.block.data.type.Lectern) block.getBlockData();
-            lecternData.setHasBook(true);
-            block.setBlockData(lecternData);
-        }
-
         if (!(block.getState() instanceof Lectern)) return;
         Lectern lectern = (Lectern) block.getState();
         
@@ -144,7 +137,9 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         // Czyszczenie i ustawianie nowej książki w ekwipunku pulpitu
         lectern.getInventory().clear();
         lectern.getInventory().setItem(0, book);
-        lectern.update(true, org.bukkit.block.Lectern.class.isInstance(lectern));
+        
+        // Wymuszenie aktualizacji fizycznego stanu bloku dla wszystkich graczy w pobliżu
+        lectern.update(true, true);
     }
 
     @EventHandler
