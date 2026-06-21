@@ -38,12 +38,11 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
             this.getCommand("bloodledger").setExecutor(this);
         }
 
-        // Wczytywanie zapisanej lokalizacji pulpitu po restarcie serwera
         if (getConfig().contains("lectern-location")) {
             lecternLocation = getConfig().getLocation("lectern-location");
         }
 
-        // Tracker lokalizacji baz (co 5 sekund)
+        // Tracker baz co 5 sekund
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -54,7 +53,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
             }
         }.runTaskTimer(this, 100L, 100L);
 
-        // Sprawdzanie czasu gry (aktualizacja o świcie)
+        // Aktualizacja o świcie
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -83,9 +82,12 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         Block block = lecternLocation.getBlock();
         if (block.getType() != Material.LECTERN) return;
 
-        if (!(block.getState() instanceof Lectern)) return;
-        Lectern lectern = (Lectern) block.getState();
+        // Bezpieczne sprawdzenie stanu bloku przed rzutowaniem klas
+        if (!(block.getState() instanceof Lectern)) {
+            return;
+        }
         
+        Lectern lectern = (Lectern) block.getState();
         ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
         BookMeta meta = (BookMeta) book.getItemMeta();
 
@@ -106,7 +108,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
         meta.addPage(page1.toString());
 
-        // Strona 2: Kordy poszukiwanych graczy (KS > 3)
+        // Strona 2: KS > 3
         StringBuilder page2 = new StringBuilder();
         page2.append(ChatColor.DARK_RED + "Poszukiwani (>3 KS):\n\n");
         boolean anyBounty = false;
@@ -134,10 +136,13 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
         book.setItemMeta(meta);
         
-        // Bezpieczne ustawianie książki
-        lectern.getInventory().clear();
-        lectern.getInventory().setItem(0, book);
-        lectern.update(true, true);
+        try {
+            lectern.getInventory().clear();
+            lectern.getInventory().setItem(0, book);
+            lectern.update(true, true);
+        } catch (Exception e) {
+            getLogger().warning("Nie udalo sie wlozyc ksiazki do pulpitu. Bloku jeszcze nie zainicjalizowano.");
+        }
     }
 
     @EventHandler
@@ -176,42 +181,43 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         }
 
         if (args.length > 0 && args[0].equalsIgnoreCase("set")) {
-            // KLUCZOWA ZMIANA: Pobieramy blok dokładnie 1 krok PRZED graczem (w kierunku, w którym patrzy)
-            Location spawnLoc = player.getLocation().add(player.getLocation().getDirection().multiply(1.0)).getBlock().getLocation();
-            Block targetBlock = spawnLoc.getBlock();
-
-            // Zabezpieczenie na wypadek gdyby przed graczem była ściana lub powietrze na złej wysokości
-            if (targetBlock.getType() != Material.AIR && targetBlock.getType() != Material.CAVE_AIR) {
-                // Jeśli przed graczem coś stoi, bierzemy blok na poziomie oczu/stóp żeby nie psuć mapy
-                spawnLoc = player.getLocation().getBlock().getLocation();
-                targetBlock = spawnLoc.getBlock();
-            }
-
-            // 1. Postawienie bloku
-            targetBlock.setType(Material.LECTERN);
+            // Pobieramy bezpieczną pozycję pod nogami gracza
+            final Location spawnLoc = player.getLocation().getBlock().getLocation();
             
-            // 2. Obrócenie go przodem do oczu gracza
-            if (targetBlock.getBlockData() instanceof Directional) {
-                Directional directional = (Directional) targetBlock.getBlockData();
-                directional.setFacing(player.getFacing().getOppositeFace());
-                targetBlock.setBlockData(directional);
-            }
-            
-            // 3. Zapisanie lokalizacji
+            // Zapisujemy lokalizację w plikach konfiguracyjnych serwera
             lecternLocation = spawnLoc;
             getConfig().set("lectern-location", spawnLoc);
             saveConfig();
 
-            player.sendMessage(ChatColor.GREEN + "Pomyślnie utworzono ołtarz Księgi Krwi krok przed Tobą!");
+            final org.bukkit.block.BlockFace playerFacing = player.getFacing();
 
-            // 4. Włożenie książki (odczekanie 3 ticków daje silnikowi gry czas na usunięcie gracza z kolizji bloku)
+            // PRZENIESIENIE CAŁEJ LOGIKI DO SCHEDULERA (Czeka 2 ticki, dając serwerowi czas na bezpieczną modyfikację świata)
             new BukkitRunnable() {
                 @Override
                 public void run() {
-                    updateBloodLedger();
+                    Block targetBlock = spawnLoc.getBlock();
+                    
+                    // 1. Stawiamy blok
+                    targetBlock.setType(Material.LECTERN, false);
+                    
+                    // 2. Obracamy blok
+                    if (targetBlock.getBlockData() instanceof Directional) {
+                        Directional directional = (Directional) targetBlock.getBlockData();
+                        directional.setFacing(playerFacing.getOppositeFace());
+                        targetBlock.setBlockData(directional, false);
+                    }
+                    
+                    // 3. Wkładamy książkę (kolejne opóźnienie 2 ticki, aby stan bloku się odświeżył)
+                    new BukkitRunnable() {
+                        @Override
+                        public void run() {
+                            updateBloodLedger();
+                        }
+                    }.runTaskLater(BloodLedger.this, 2L);
                 }
-            }.runTaskLater(this, 3L);
+            }.runTaskLater(this, 2L);
 
+            player.sendMessage(ChatColor.GREEN + "Pomyślnie zainicjowano tworzenie Księgi Krwi w Twojej pozycji!");
             return true;
         }
 
