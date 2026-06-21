@@ -6,7 +6,6 @@ import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
-import org.bukkit.block.Lectern;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -60,7 +59,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
                 
                 if (time >= 0 && time < 100) {
                     if (!isDayChanged) {
-                        updateBloodLedger();
                         isDayChanged = true;
                     }
                 } else {
@@ -74,18 +72,11 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         return playerDataMap.computeIfAbsent(player.getUniqueId(), k -> new PlayerData(player.getName()));
     }
 
-    private void updateBloodLedger() {
-        if (lecternLocation == null) return;
-        
-        Block block = lecternLocation.getBlock();
-        if (block.getType() != Material.LECTERN) return;
-
-        if (!(block.getState() instanceof Lectern)) return;
-        Lectern lectern = (Lectern) block.getState();
-
+    // Metoda teraz generuje książkę w locie bezpośrednio dla konkretnego gracza
+    private ItemStack createBloodLedgerBook() {
         ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
         BookMeta meta = (BookMeta) book.getItemMeta();
-        if (meta == null) return;
+        if (meta == null) return book;
 
         meta.setTitle(ChatColor.DARK_RED + "Ksiega Krwi");
         meta.setAuthor("Serwer");
@@ -132,12 +123,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         meta.addPage(page2.toString());
 
         book.setItemMeta(meta);
-        
-        lectern.getInventory().clear();
-        lectern.update(true, true); 
-        
-        lectern.getInventory().setItem(0, book);
-        lectern.update(true, true);
+        return book;
     }
 
     @EventHandler
@@ -147,15 +133,9 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         if (event.getClickedBlock() != null && event.getClickedBlock().getType() == Material.LECTERN) {
             Block block = event.getClickedBlock();
             
-            // 1. Logika rejestracji nowej księgi za pomocą Pióra
+            // 1. Rejestracja pustego pulpitu za pomocą PIÓRA (Gracz klika PUSTY pulpit piórkiem)
             if (event.getAction() == Action.RIGHT_CLICK_BLOCK && player.getInventory().getItemInMainHand().getType() == Material.FEATHER) {
                 if (!player.isOp()) return;
-                
-                org.bukkit.block.data.type.Lectern lecternData = (org.bukkit.block.data.type.Lectern) block.getBlockData();
-                if (!lecternData.hasBook()) {
-                    player.sendMessage(ChatColor.RED + "Musisz najpierw RĘCZNIE włożyć dowolną książkę z piórem (Book and Quill) do pulpitu!");
-                    return;
-                }
 
                 event.setCancelled(true);
                 
@@ -163,19 +143,18 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
                 getConfig().set("lectern-location", lecternLocation);
                 saveConfig();
                 
-                player.sendMessage(ChatColor.GREEN + "Pomyślnie zarejestrowano ten pulpit jako Księgę Krwi!");
-                updateBloodLedger();
+                player.sendMessage(ChatColor.GREEN + "Pomyślnie zarejestrowano ten pulpit jako ołtarz Księgi Krwi!");
                 return;
             }
 
-            // 2. NOWOŚĆ ALTERNATE: Uniwersalna blokada wyciągania / niszczenia interfejsu Księgi Krwi
+            // 2. KLUCZOWA ZMIANA: Obsługa zwykłego kliknięcia przez gracza
             if (lecternLocation != null && block.getLocation().equals(lecternLocation)) {
-                // Pozwalamy wyłącznie na zwykłe otwieranie (PPM), jeśli gracz nie trzyma pióra
-                if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
-                    if (!player.isOp()) {
-                        event.setCancelled(true);
-                        player.sendMessage(ChatColor.RED + "Nie możesz zniszczyć ani okraść Księgi Krwi!");
-                    }
+                if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+                    // Blokujemy otwarcie domyślnego (pustego) menu pulpitu Minecrafta
+                    event.setCancelled(true); 
+                    
+                    // Otwieramy książkę bezpośrednio na ekranie gracza w wersji wirtualnej
+                    player.openBook(createBloodLedgerBook());
                 }
             }
         }
@@ -193,8 +172,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
             PlayerData killerData = getPlayerData(killer);
             killerData.kills++;
             killerData.killstreak++;
-            
-            updateBloodLedger();
         }
     }
 
@@ -210,7 +187,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-        sender.sendMessage(ChatColor.YELLOW + "Instrukcja: Postaw pulpit, włóż Book and Quill, kliknij piórkiem PPM.");
+        sender.sendMessage(ChatColor.YELLOW + "Instrukcja: Postaw ZWYKŁY PUSTY pulpit, weź Pióro (Feather) do ręki i kliknij PPM na pulpit.");
         return true;
     }
 
