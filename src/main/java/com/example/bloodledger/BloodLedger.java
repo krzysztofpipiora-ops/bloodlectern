@@ -11,6 +11,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
@@ -72,7 +73,6 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         return playerDataMap.computeIfAbsent(player.getUniqueId(), k -> new PlayerData(player.getName()));
     }
 
-    // Metoda teraz generuje książkę w locie bezpośrednio dla konkretnego gracza
     private ItemStack createBloodLedgerBook() {
         ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
         BookMeta meta = (BookMeta) book.getItemMeta();
@@ -126,36 +126,37 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         return book;
     }
 
-    @EventHandler
+    // Używamy HIGHEST i ignoreCancelled = false, aby ominąć blokady WorldGuarda i Spawn Protection spawnu
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onLecternClick(PlayerInteractEvent event) {
         Player player = event.getPlayer();
         
-        if (event.getClickedBlock() != null && event.getClickedBlock().getType() == Material.LECTERN) {
-            Block block = event.getClickedBlock();
-            
-            // 1. Rejestracja pustego pulpitu za pomocą PIÓRA (Gracz klika PUSTY pulpit piórkiem)
-            if (event.getAction() == Action.RIGHT_CLICK_BLOCK && player.getInventory().getItemInMainHand().getType() == Material.FEATHER) {
-                if (!player.isOp()) return;
+        if (event.getClickedBlock() == null || event.getClickedBlock().getType() != Material.LECTERN) {
+            return;
+        }
 
+        Block block = event.getClickedBlock();
+
+        // WARUNEK 1: Rejestracja pulpitu (Tylko dla OP i tylko z Piórem w dłoni)
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK && player.getInventory().getItemInMainHand().getType() == Material.FEATHER) {
+            if (player.isOp()) {
                 event.setCancelled(true);
-                
                 lecternLocation = block.getLocation();
                 getConfig().set("lectern-location", lecternLocation);
                 saveConfig();
-                
                 player.sendMessage(ChatColor.GREEN + "Pomyślnie zarejestrowano ten pulpit jako ołtarz Księgi Krwi!");
-                return;
             }
+            return; // Kończymy, aby OP klikający piórem nie otwierał jednocześnie książki
+        }
 
-            // 2. KLUCZOWA ZMIANA: Obsługa zwykłego kliknięcia przez gracza
-            if (lecternLocation != null && block.getLocation().equals(lecternLocation)) {
-                if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
-                    // Blokujemy otwarcie domyślnego (pustego) menu pulpitu Minecrafta
-                    event.setCancelled(true); 
-                    
-                    // Otwieramy książkę bezpośrednio na ekranie gracza w wersji wirtualnej
-                    player.openBook(createBloodLedgerBook());
-                }
+        // WARUNEK 2: Otwieranie książki (Dla KAŻDEGO gracza klikającego PPM na zarejestrowany pulpit)
+        if (lecternLocation != null && block.getLocation().equals(lecternLocation)) {
+            if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+                // Całkowicie ignorujemy anulowanie eventu przez inne pluginy ochronne, aby każdy mógł przeczytać
+                event.setCancelled(true); 
+                
+                // Otwieramy wirtualną książkę bezpośrednio graczowi
+                player.openBook(createBloodLedgerBook());
             }
         }
     }
