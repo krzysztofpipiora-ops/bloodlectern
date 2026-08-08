@@ -1,9 +1,10 @@
 name: BloodLedger
-version: '1.0'
+version: 1.0.0
 main: com.example.bloodledger.BloodLedger
-api-version: '1.20'
+api-version: '1.21'
+author: TwojNick
+description: System Ksiegi Krwi i statystyk zabojstw dla Minecraft 1.21.11.
 commands:
   bloodledger:
-    description: Zarzadzanie Ksiega Krwi.
-    permission: bloodledger.admin
-    usage: /<command> set
+    description: Informacja jak ustawic Ksiege Krwi
+    permission: bloodledger.use
