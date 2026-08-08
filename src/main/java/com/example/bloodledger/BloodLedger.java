@@ -17,6 +17,7 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BookMeta;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -42,6 +43,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
             lecternLocation = getConfig().getLocation("lectern-location");
         }
 
+        // Śledzenie lokalizacji graczy pod statystyki bazy
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -52,6 +54,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
             }
         }.runTaskTimer(this, 100L, 100L);
 
+        // Licznik/Reset cyklu dobowego
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -81,7 +84,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         meta.setTitle(ChatColor.DARK_RED + "Ksiega Krwi");
         meta.setAuthor("Serwer");
 
-        // Strona 1
+        // Strona 1: Top Zabójstw
         StringBuilder page1 = new StringBuilder();
         page1.append(ChatColor.RED + "=== KSIĘGA KRWI ===\n\n");
         page1.append(ChatColor.DARK_GRAY + "Najwiecej zabojstw:\n");
@@ -96,7 +99,7 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         }
         meta.addPage(page1.toString());
 
-        // Strona 2
+        // Strona 2: Nagrody / Bounties
         StringBuilder page2 = new StringBuilder();
         page2.append(ChatColor.DARK_RED + "Poszukiwani (>3 KS):\n\n");
         boolean anyBounty = false;
@@ -126,18 +129,19 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
         return book;
     }
 
-    // Używamy HIGHEST i ignoreCancelled = false, aby ominąć blokady WorldGuarda i Spawn Protection spawnu
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onLecternClick(PlayerInteractEvent event) {
-        Player player = event.getPlayer();
-        
+        // Ignorowanie drugiej dłoni (OFF_HAND) wymagane na nowszych wersjach
+        if (event.getHand() == EquipmentSlot.OFF_HAND) return;
+
         if (event.getClickedBlock() == null || event.getClickedBlock().getType() != Material.LECTERN) {
             return;
         }
 
         Block block = event.getClickedBlock();
+        Player player = event.getPlayer();
 
-        // WARUNEK 1: Rejestracja pulpitu (Tylko dla OP i tylko z Piórem w dłoni)
+        // Rejestracja ołtarza (OP + Piórko)
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK && player.getInventory().getItemInMainHand().getType() == Material.FEATHER) {
             if (player.isOp()) {
                 event.setCancelled(true);
@@ -146,16 +150,13 @@ public final class BloodLedger extends JavaPlugin implements Listener, CommandEx
                 saveConfig();
                 player.sendMessage(ChatColor.GREEN + "Pomyślnie zarejestrowano ten pulpit jako ołtarz Księgi Krwi!");
             }
-            return; // Kończymy, aby OP klikający piórem nie otwierał jednocześnie książki
+            return;
         }
 
-        // WARUNEK 2: Otwieranie książki (Dla KAŻDEGO gracza klikającego PPM na zarejestrowany pulpit)
+        // Otwieranie wirtualnej księgi
         if (lecternLocation != null && block.getLocation().equals(lecternLocation)) {
             if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
-                // Całkowicie ignorujemy anulowanie eventu przez inne pluginy ochronne, aby każdy mógł przeczytać
-                event.setCancelled(true); 
-                
-                // Otwieramy wirtualną książkę bezpośrednio graczowi
+                event.setCancelled(true);
                 player.openBook(createBloodLedgerBook());
             }
         }
